@@ -15,10 +15,19 @@ class Program():
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
+        self.loggingfile = None
+        self.resultfile = None
         
+        self.start()
+        
+    def start(self):
         self.initLoggingFile()
+        print("Starting program")
+        self.writelog("Starting program")
+        
+        self.initChannel()
         self.initResultFile()
-            
+      
     def initLoggingFile(self):
         loggingfilename = "videosstats_" + self.idchannel
         self.loggingfile = open(loggingfilename + ".log", "a", encoding="utf-8")
@@ -58,6 +67,11 @@ class Program():
             if response.status_code == 200:
                 channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
+
+                if channel_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.exitProgram()                
                 
                 item = channel_json.get('items')[0]
                 snippet = item.get('snippet')
@@ -83,16 +97,14 @@ class Program():
     def clean(self):
         try:
             # Close Files
-            self.loggingfile.close()
-            self.resultfile.close()
+            if self.loggingfile is not None:
+                self.loggingfile.close()
+            if self.resultfile is not None:    
+                self.resultfile.close()
         except Exception as e:
             print("Error cleaning up : " + str(e))
     
     def main(self):
-        print("Starting program")
-        self.writelog("Starting program")
-        self.initChannel()
-
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
 

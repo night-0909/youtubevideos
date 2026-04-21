@@ -18,8 +18,17 @@ class Program():
         self.youtubeKey = youtubeKey        
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
+        self.loggingfile = None
+        self.resultfile = None
         
+        self.start()
+        
+    def start(self):
         self.initLoggingFile()
+        print("Starting program")
+        self.writelog("Starting program")
+        
+        self.initChannel()
         self.initResultFile()
             
     def initLoggingFile(self):
@@ -62,6 +71,11 @@ class Program():
             if response.status_code == 200:
                 channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
+
+                if channel_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.exitProgram()                
                 
                 item = channel_json.get('items')[0]
                 snippet = item.get('snippet')
@@ -87,8 +101,10 @@ class Program():
     def clean(self):
         try:
             # Close Files
-            self.loggingfile.close()
-            self.resultfile.close()
+            if self.loggingfile is not None:
+                self.loggingfile.close()
+            if self.resultfile is not None:    
+                self.resultfile.close()
         except Exception as e:
             print("Error cleaning up : " + str(e))
 
@@ -281,10 +297,6 @@ class Program():
         fcomment.close()
     
     def main(self):
-        print("Starting program")
-        self.writelog("Starting program")
-        self.initChannel()
-
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel + " playlist id : " + self.playlistId)
         self.writeresult("\n")
 
@@ -297,6 +309,11 @@ class Program():
             if response.status_code == 200:
                 playlistResponse = response.text
                 playlist_json = json.loads(playlistResponse)
+                
+                if playlist_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] playlistId={self.playlistId} Error playlistURL {playlistURL} : playlist not found")
+                    self.writelog(f"[×] playlistId={self.playlistId} Error playlistURL {playlistURL} : playlist not found")
+                    self.exitProgram()
             else:
                 print(f"[×] playlistId={self.playlistId} Response of playlistURL {playlistURL} isn't OK : {response.status_code} {response.text}")
                 self.writelog(f"[×] playlistId={self.playlistId} Response of playlistURL {playlistURL} isn't OK : {response.status_code} {response.text}")
