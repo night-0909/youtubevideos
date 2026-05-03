@@ -9,7 +9,7 @@ import requests, json
 from zoneinfo import ZoneInfo
 
 class Program():
-    def __init__(self, idchannel, urlchannel, playlistId, needComments, needDescription, youtubeKey, tz, dateFormats):
+    def __init__(self, idchannel, urlchannel, playlistId, needComments, needDescription, youtubeKey, tz, output_dirs, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
         self.playlistId = playlistId
@@ -17,6 +17,7 @@ class Program():
         self.needDescription = needDescription
         self.youtubeKey = youtubeKey        
         self.tzinfo = ZoneInfo(tz)
+        self.output_dirs = output_dirs
         self.dateFormats = dateFormats
         self.loggingfile = None
         self.resultfile = None
@@ -30,16 +31,24 @@ class Program():
         
         self.initChannel()
         self.initResultFile()
-            
+        
     def initLoggingFile(self):
-        loggingfilename = "playlist_" + self.idchannel
-        self.loggingfile = open(loggingfilename + ".log", "a", encoding="utf-8")
+        loggingfilename = self.output_dirs['log_file'] + "playlist_" + self.idchannel + "_" + self.playlistId + ".log"
+        try:
+            self.loggingfile = open(loggingfilename, "a", encoding="utf-8")
+        except Exception as e:
+            print(e)
+            self.exitProgram()
     
     def initResultFile(self):
         dateNow = self.getDateNow()
-        resultfilename = "playlist_" + self.idchannel + "_" + self.playlistId + "_" + dateNow['dateFileString'] + ".txt"
-        self.resultfile = open(resultfilename, "w", encoding="utf-8")
-    
+        resultfilename = self.output_dirs['result_file'] + "playlist_" + self.idchannel + "_" + self.playlistId + "_" + dateNow['dateFileString'] + ".txt"
+        try:
+            self.resultfile = open(resultfilename, "w", encoding="utf-8")
+        except Exception as e:
+            print(e)
+            self.exitProgram()
+           
     def getDateNow(self):
         timestamp_now = datetime.now().timestamp()
         date = datetime.fromtimestamp(timestamp_now, self.tzinfo)
@@ -92,11 +101,15 @@ class Program():
 
     # Used when errors/exceptions occured and when we want to exit right now
     def exitProgram(self):
-        self.writelog("Execution had errors")
-        self.writelog("Ending program")
+        try:
+            self.writelog("Execution had errors")
+            self.writelog("Ending program")
+        except Exception as e:
+            print(e)
+
         self.clean()
         sys.exit(1)
-    
+        
     # Used at the end of program without errors/exceptions and when errors/exception occured
     def clean(self):
         try:
@@ -111,7 +124,7 @@ class Program():
     def getComments(self, infosVideo):
         url = "https://www.youtube.com/watch?v=" + infosVideo["videoId"]
         dateNow = self.getDateNow()
-        file = "comment_" + infosVideo["videoId"] + "_" + dateNow['dateFileString'] + ".txt"
+        file = self.output_dirs['result_file'] + "comment_" + infosVideo["videoId"] + "_" + dateNow['dateFileString'] + ".txt"
         fcomment = open(file, "a", encoding="utf-8")
         print(url)
         fcomment.write(url + "\n")
@@ -297,6 +310,7 @@ class Program():
         fcomment.close()
     
     def main(self):
+        self.writelog("Channel " + self.urlchannel + " id : " + self.idchannel)        
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel + " playlist id : " + self.playlistId)
         self.writeresult("\n")
 
@@ -328,14 +342,21 @@ class Program():
         
         title = snippet.get('title')
         description = snippet.get('description')
+        itemCount = items[0].get('contentDetails').get('itemCount')
         print(title)
         print(description)
-
-        self.writeresult("Title : " + title + "\n")
-        self.writeresult("Description : " + description + "\n")
+        print(itemCount)
+        
+        self.writeresult(f"Title : {title}")
         self.writeresult("\n")
-               
-        countItems = 0
+        self.writeresult(f"Description : {description}")
+        self.writeresult("\n")
+        self.writeresult(f"Videos : {itemCount}")
+        self.writelog(f"Playlist id : {self.playlistId}")
+        self.writelog(f"Videos : {itemCount}")
+        self.writeresult("\n\n")
+        
+        num_videos_processed = 0        
 
         # max results = 50 and then use nextPageToken value in pageToken for the next request
         nextPageToken = 0
@@ -364,7 +385,6 @@ class Program():
             nextPageToken = playlistItems_json.get('nextPageToken')
             
             itemsPlaylist = playlistItems_json.get('items')
-            countItems = countItems + len(itemsPlaylist)
             for itemPlaylist in itemsPlaylist:
                 snippetPlaylistItem = itemPlaylist.get('snippet')
                 title = snippetPlaylistItem.get('title')
@@ -383,80 +403,90 @@ class Program():
                 # Get additionnal infos of video
                 additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + youtubeKey + "&id=" + videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
-                response = requests.get(additionnalInfosURL)
-                if response.status_code == 200:
-                    additionnalInfosResponse = response.text
-                    print(additionnalInfosResponse)
-                    video_json = json.loads(additionnalInfosResponse)
-                    if (len(video_json.get('items')) > 0):
-                        itemVideo = video_json.get('items')[0]
-                        snippetVideo = itemVideo.get('snippet')
+                
+                try:
+                    response = requests.get(additionnalInfosURL)               
+                    if response.status_code == 200:
+                        additionnalInfosResponse = response.text
+                        video_json = json.loads(additionnalInfosResponse)
+                    else:
+                        print(f"[×] idVideo={videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        self.writelog(f"[×] idVideo={videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        self.exitProgram()
+                except Exception as e:
+                    print(f"[×] idVideo={videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    self.writelog(f"[×] idVideo={videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    self.exitProgram()
+                    
+                if (len(video_json.get('items')) > 0):
+                    itemVideo = video_json.get('items')[0]
+                    snippetVideo = itemVideo.get('snippet')
 
-                        dateVideo = snippetVideo.get('publishedAt')
-                        dateVideo_object = dateutil.parser.isoparse(dateVideo)
-                        dateVideo_text = dateVideo_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                        
-                        title = snippetVideo.get('title')
-                        description = snippetVideo.get('description')
+                    dateVideo = snippetVideo.get('publishedAt')
+                    dateVideo_object = dateutil.parser.isoparse(dateVideo)
+                    dateVideo_text = dateVideo_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                    
+                    title = snippetVideo.get('title')
+                    description = snippetVideo.get('description')
 
-                        contentDetailsVideo = itemVideo.get('contentDetails')
-                        duration = contentDetailsVideo.get('duration')
-                        durationString = duration[2:len(duration)]
-                        
-                        statsVideo = itemVideo.get('statistics')
-                        viewCount = statsVideo.get('viewCount')
-                        likeCount = statsVideo.get('likeCount')
-                        commentCount = statsVideo.get('commentCount')
+                    contentDetailsVideo = itemVideo.get('contentDetails')
+                    duration = contentDetailsVideo.get('duration')
+                    durationString = duration[2:len(duration)]
+                    
+                    statsVideo = itemVideo.get('statistics')
+                    viewCount = statsVideo.get('viewCount')
+                    likeCount = statsVideo.get('likeCount')
+                    commentCount = statsVideo.get('commentCount')
 
-                        print("Date : " + dateVideo_text)
-                        self.writeresult("Date : " + dateVideo_text)
+                    print("Date : " + dateVideo_text)
+                    self.writeresult("Date : " + dateVideo_text)
 
-                        # Warning : somes lives are scheduled but still have chat messages and comments, so no start and end time for them
-                        if "liveStreamingDetails" in itemVideo:
-                            actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
-                            actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                            actualEndTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualEndTime", ""))
-                            actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                            print("start : " + actualStartTime_text)
-                            self.writeresult(" (start : " + actualStartTime_text)
-                            print("end : " + actualEndTime_text + ")")
-                            self.writeresult(" end : " + actualEndTime_text + ")")
+                    # Warning : somes lives are scheduled but still have chat messages and comments, so no start and end time for them
+                    if "liveStreamingDetails" in itemVideo:
+                        actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        actualEndTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualEndTime", ""))
+                        actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        print("start : " + actualStartTime_text)
+                        self.writeresult(" (start : " + actualStartTime_text)
+                        print("end : " + actualEndTime_text + ")")
+                        self.writeresult(" end : " + actualEndTime_text + ")")
 
+                    self.writeresult("\n")
+
+                    print("Duration : " + str(durationString))
+                    self.writeresult("Duration : " + str(durationString))
+                    self.writeresult("\n")
+
+                    if self.needDescription is True:
+                        print("Description : " + str(description))
+                        self.writeresult("Description : " + str(description))
                         self.writeresult("\n")
+                    
+                    print("Views : " + str(viewCount))
+                    self.writeresult("views : " + str(viewCount))
+                    self.writeresult("\n")
+                    print("Likes : " + str(likeCount))
+                    self.writeresult("Likes : " + str(likeCount))
+                    self.writeresult("\n")
+                    print("Comments : " + str(commentCount))
+                    self.writeresult("Comments : " + str(commentCount))
+                    self.writeresult("\n")
+                                    
+                    # Get comments
+                    if self.needComments is True:
+                        # Just pass useful informations to getComments()
+                        print("Get comments video " + str(videoId))
+                        infosVideo = {"videoId": videoId, "title": title, "durationString": durationString, "date" : dateVideo_text, "description": description,
+                                      "liveStreamingDetails": itemVideo.get("liveStreamingDetails", None)}
 
-                        print("Duration : " + str(durationString))
-                        self.writeresult("Duration : " + str(durationString))
-                        self.writeresult("\n")
+                        self.getComments(infosVideo)                
 
-                        if self.needDescription is True:
-                            print("Description : " + str(description))
-                            self.writeresult("Description : " + str(description))
-                            self.writeresult("\n")
-                        
-                        print("Views : " + str(viewCount))
-                        self.writeresult("views : " + str(viewCount))
-                        self.writeresult("\n")
-                        print("Likes : " + str(likeCount))
-                        self.writeresult("Likes : " + str(likeCount))
-                        self.writeresult("\n")
-                        print("Comments : " + str(commentCount))
-                        self.writeresult("Comments : " + str(commentCount))
-                        self.writeresult("\n")
-
-                self.writeresult("\n")
-                                
-                # Get comments
-                if self.needComments is True:
-                    # Just pass useful informations to getComments()
-                    print("Get comments video " + str(videoId))
-                    infosVideo = {"videoId": videoId, "title": title, "durationString": durationString, "date" : dateVideo_text, "description": description,
-                                  "liveStreamingDetails": itemVideo.get("liveStreamingDetails", None)}
-
-                    self.getComments(infosVideo)                
+                self.writeresult("\n")                
+                num_videos_processed = num_videos_processed + 1
         
-            
-        print("Videos in playlist : " + str(countItems))
-        self.writeresult("Videos in playlist : " + str(countItems) + "\n\n")
+        print(f"Processed : {num_videos_processed}")
+        self.writelog(f"Processed : {num_videos_processed}")
                     
         print("Execution was OK")
         self.writelog("Execution was OK")
@@ -465,6 +495,10 @@ class Program():
         self.clean()
 
 if __name__ == "__main__":
+    # Paths
+    output_dirs = {'log_file': "",
+                   'result_file': ""
+    }        
     # Youtube
     urlchannel = "https://www.youtube.com/@your_channel"
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then "Copy channel ID"
@@ -478,5 +512,6 @@ if __name__ == "__main__":
     dateFormats = {"dateString": "%d/%m/%Y %H:%M:%S", "dateDBString": "%Y-%m-%d %H:%M:%S", "dateFileString": "%d%m%Y%H%M%S"}
 
     # Launch
-    program = Program(idchannel, urlchannel, playlistId, needComments, needDescription, youtubeKey, tz, dateFormats)
+    program = Program(idchannel, urlchannel, playlistId, needComments, needDescription, youtubeKey, tz, output_dirs, dateFormats)
     program.main()
+
