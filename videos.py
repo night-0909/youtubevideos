@@ -3,8 +3,9 @@
 import scrapetube
 from datetime import datetime
 import dateutil.parser
-import sys
+import sys, os
 import requests, json
+import magic, mimetypes
 from zoneinfo import ZoneInfo
 
 class Program():
@@ -135,7 +136,7 @@ class Program():
             
             for video in videosList:
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
-                print(url)
+                print(url)               
                 self.writeresult(url)
                 self.writeresult("\n")
                 
@@ -206,10 +207,22 @@ class Program():
                         response = requests.get(thumbnail_url, stream = True)
                         if response.status_code == 200:
                             thumbnailInfosResponse = response.content
-                            filethumbnail = video['videoId'] + "_thumbnail_" + dateNow['dateFileString'] + ".jpeg"
+
+                            # Download file without extension
+                            filethumbnail = video['videoId'] + "_thumbnail_" + dateNow['dateFileString']
                             fthumbnail = open(filethumbnail, "wb")
                             fthumbnail.write(thumbnailInfosResponse)
                             fthumbnail.close()
+
+                            # Guess mimetype, guess file extension then rename file with extension
+                            fileMimetype = magic.from_file(filethumbnail, mime=True)
+                            fileExtension = mimetypes.guess_extension(fileMimetype)
+                            if fileExtension is not None:
+                                newfilethumbnail = filethumbnail + fileExtension
+                                os.rename(filethumbnail, newfilethumbnail)
+                            else:
+                                print(f"[×] idVideo={video['videoId']} filethumbnail={filethumbnail} Couldn't guess file extension mimetype={fileMimetype}, we keep file without extension")
+                                self.writelog(f"[×] idVideo={video['videoId']} filethumbnail={filethumbnail} Couldn't guess file extension mimetype={fileMimetype}, we keep file without extension")
                         else:
                             print(f"[×] idVideo={video['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
                             self.writelog(f"[×] idVideo={video['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
