@@ -128,21 +128,39 @@ class Program():
         fcomment = open(file, "a", encoding="utf-8")
         print(url)
         fcomment.write(url + "\n")
-        fcomment.write(str(infosVideo["title"]) + "\n")
+        fcomment.write("Title : " + str(infosVideo["title"]) + "\n")
         fcomment.write("Date : " + infosVideo["date"])
+  
+        # Get liveStreamingDetails infos
+        if infosVideo["liveStreamingDetails"] is not None:
+            if infosVideo["liveBroadcastContent"] == "none":                    
+                actualStartTime_object = dateutil.parser.isoparse(infosVideo.get("liveStreamingDetails").get("actualStartTime", ""))
+                actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                actualEndTime_object = dateutil.parser.isoparse(infosVideo.get("liveStreamingDetails").get("actualEndTime", ""))
+                actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
 
-        if infosVideo["liveStreamingDetails"] is not None:       
-            actualStartTime_object = dateutil.parser.isoparse(infosVideo.get("liveStreamingDetails").get("actualStartTime", ""))
-            actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
-            actualEndTime_object = dateutil.parser.isoparse(infosVideo.get("liveStreamingDetails").get("actualEndTime", ""))
-            actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
-            fcomment.write(" (début : " + actualStartTime_text)
-            fcomment.write(" fin : " + actualEndTime_text + ")")
-            
+                fcomment.write(" (start : " + actualStartTime_text)
+                fcomment.write(" end : " + actualEndTime_text + ")")
+            elif infosVideo["liveBroadcastContent"] == "live":
+                actualStartTime_object = dateutil.parser.isoparse(infosVideo.get("liveStreamingDetails").get("actualStartTime", ""))
+                actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                actualEndTime_text = "live"
+                infosVideo["durationString"] = "None"
+
+                fcomment.write(" (start : " + actualStartTime_text)
+                fcomment.write(" end : " + actualEndTime_text + ")")
+            elif infosVideo["liveBroadcastContent"] == "upcoming":
+                actualscheduledStartTime_object = dateutil.parser.isoparse(infosVideo.get("liveStreamingDetails").get("scheduledStartTime", ""))
+                actualscheduledStartTime_text = actualscheduledStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                infosVideo["durationString"] = "None"
+
+                fcomment.write(" (scheduled : " + actualscheduledStartTime_text + ")")
+        
         fcomment.write("\n")   
-        fcomment.write(str(infosVideo["durationString"]) + "\n")
-        fcomment.write(str(infosVideo["description"]) + "\n")
-
+        fcomment.write("Duration : " + str(infosVideo["durationString"]) + "\n")
+        fcomment.write("Description : " + str(infosVideo["description"]) + "\n")
+        fcomment.write("Comments :")
+        
         lastParentReplies = 0
         idComment = 0
 
@@ -168,7 +186,9 @@ class Program():
                     commentsResponse = response.text
                     comments_json = json.loads(commentsResponse)
                     self.writeresult("\n")
-                    self.writeresult(f"{comments_json['error']['message']}")
+                    self.writeresult(f"{comments_json['error']['message']}\n")
+                    fcomment.write("\n")
+                    fcomment.write(f"{comments_json['error']['message']}\n")
                     break
                 else:
                     print(f"[×] idVideo={infosVideo['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
@@ -392,9 +412,9 @@ class Program():
                 videoId = contentDetailsPlaylistItem.get('videoId')
 
                 print(videoId)
-                print(title)
                 self.writeresult("videoURL : https://youtube.com/watch?v=" + videoId + "\n")
-                self.writeresult("title : " + title + "\n")
+                print("Title : " + title)
+                self.writeresult("Title : " + title + "\n")
                 dateAddedToPlaylist = snippetPlaylistItem.get('publishedAt')
                 dateAddedToPlaylist_object = dateutil.parser.isoparse(dateAddedToPlaylist)
                 dateAddedToPlaylist_text = dateAddedToPlaylist_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
@@ -430,7 +450,7 @@ class Program():
                     description = snippetVideo.get('description')
 
                     contentDetailsVideo = itemVideo.get('contentDetails')
-                    duration = contentDetailsVideo.get('duration')
+                    duration = contentDetailsVideo.get('duration', '')
                     durationString = duration[2:len(duration)]
                     
                     statsVideo = itemVideo.get('statistics')
@@ -440,18 +460,37 @@ class Program():
 
                     print("Date : " + dateVideo_text)
                     self.writeresult("Date : " + dateVideo_text)
-
-                    # Warning : somes lives are scheduled but still have chat messages and comments, so no start and end time for them
+                        
+                    # Get liveStreamingDetails infos
                     if "liveStreamingDetails" in itemVideo:
-                        actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
-                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                        actualEndTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualEndTime", ""))
-                        actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                        print("start : " + actualStartTime_text)
-                        self.writeresult(" (start : " + actualStartTime_text)
-                        print("end : " + actualEndTime_text + ")")
-                        self.writeresult(" end : " + actualEndTime_text + ")")
+                        if snippetVideo.get("liveBroadcastContent") == "none":                    
+                            actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
+                            actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                            actualEndTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualEndTime", ""))
+                            actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
 
+                            print("start : " + actualStartTime_text)
+                            self.writeresult(" (start : " + actualStartTime_text)
+                            print("end : " + actualEndTime_text)
+                            self.writeresult(" end : " + actualEndTime_text + ")")
+                        elif snippetVideo.get("liveBroadcastContent") == "live":
+                            actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
+                            actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                            actualEndTime_text = "live"
+                            durationString = "None"
+
+                            print("start : " + actualStartTime_text)
+                            self.writeresult(" (start : " + actualStartTime_text)
+                            print("end : " + actualEndTime_text)
+                            self.writeresult(" end : " + actualEndTime_text + ")")
+                        elif snippetVideo.get("liveBroadcastContent") == "upcoming":
+                            actualscheduledStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("scheduledStartTime", ""))
+                            actualscheduledStartTime_text = actualscheduledStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                            durationString = "None"
+
+                            print("scheduled : " + actualscheduledStartTime_text)
+                            self.writeresult(" (scheduled : " + actualscheduledStartTime_text + ")")
+                    
                     self.writeresult("\n")
 
                     print("Duration : " + str(durationString))
@@ -477,7 +516,9 @@ class Program():
                     if self.needComments is True:
                         # Just pass useful informations to getComments()
                         print("Get comments video " + str(videoId))
-                        infosVideo = {"videoId": videoId, "title": title, "durationString": durationString, "date" : dateVideo_text, "description": description,
+                        infosVideo = {"videoId": videoId, "title": title, "durationString": durationString, "date" : dateVideo_text,
+                                      "description": description,
+                                      "liveBroadcastContent": snippetVideo.get("liveBroadcastContent", None), 
                                       "liveStreamingDetails": itemVideo.get("liveStreamingDetails", None)}
 
                         self.getComments(infosVideo)                

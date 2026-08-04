@@ -169,7 +169,7 @@ class Program():
                 description = snippet.get('description')
 
                 contentDetails = item.get('contentDetails')
-                duration = contentDetails.get('duration')
+                duration = contentDetails.get('duration', '')
                 durationString = duration[2:len(duration)]
                 
                 stats = item.get('statistics')
@@ -179,16 +179,36 @@ class Program():
 
                 print("Date : " + dateVideo_text)
                 self.writeresult("Date : " + dateVideo_text)
-
+                 
+                # Get liveStreamingDetails infos
                 if "liveStreamingDetails" in item:
-                    actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
-                    actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
-                    actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
-                    actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
-                    print("start : " + actualStartTime_text)
-                    self.writeresult(" (start : " + actualStartTime_text)
-                    print("end : " + actualEndTime_text)
-                    self.writeresult(" end : " + actualEndTime_text + ")")
+                    if snippet.get("liveBroadcastContent") == "none":                    
+                        actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
+                        actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+
+                        print("start : " + actualStartTime_text)
+                        self.writeresult(" (start : " + actualStartTime_text)
+                        print("end : " + actualEndTime_text)
+                        self.writeresult(" end : " + actualEndTime_text + ")")
+                    elif snippet.get("liveBroadcastContent") == "live":
+                        actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        actualEndTime_text = "live"
+                        durationString = "None"
+
+                        print("start : " + actualStartTime_text)
+                        self.writeresult(" (start : " + actualStartTime_text)
+                        print("end : " + actualEndTime_text)
+                        self.writeresult(" end : " + actualEndTime_text + ")")
+                    elif snippet.get("liveBroadcastContent") == "upcoming":
+                        actualscheduledStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("scheduledStartTime", ""))
+                        actualscheduledStartTime_text = actualscheduledStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        durationString = "None"
+
+                        print("scheduled : " + actualscheduledStartTime_text)
+                        self.writeresult(" (scheduled : " + actualscheduledStartTime_text + ")")
 
                 # Get thumbnail image, cf https://developers.google.com/youtube/v3/docs/videos#snippet.thumbnails high is always there
                 # "standard" and "maxres" may be present
