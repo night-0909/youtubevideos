@@ -74,8 +74,8 @@ class Program():
         print(channelInfosURL)
         try:
             response = requests.get(channelInfosURL)
+            channelInfosResponse = response.text
             if response.status_code == 200:
-                channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
 
                 if channel_json.get('pageInfo').get('totalResults') == 0:
@@ -144,13 +144,13 @@ class Program():
                 print(additionnalInfosURL)
                 try:
                     response = requests.get(additionnalInfosURL)
+                    additionnalInfosResponse = response.text
                     if response.status_code == 200:
-                        additionnalInfosResponse = response.text
                         video_json = json.loads(additionnalInfosResponse)
                         if video_json.get('pageInfo').get('totalResults') == 0:
                             print(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : video not found")
                             self.writelog(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : video not found")
-                            self.exitProgram()              
+                            continue
                     else:
                         print(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
                         self.writelog(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
@@ -212,7 +212,6 @@ class Program():
 
                 # Get thumbnail image, cf https://developers.google.com/youtube/v3/docs/videos#snippet.thumbnails high is always there
                 # "standard" and "maxres" may be present
-               
                 if self.getThumbnail is True:
                     dateNow = self.getDateNow()
                     thumbnails = snippet.get('thumbnails')
@@ -246,11 +245,9 @@ class Program():
                         else:
                             print(f"[×] idVideo={video['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
                             self.writelog(f"[×] idVideo={video['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
-                            self.exitProgram()
                     except Exception as e:
                         print(f"[×] idVideo={video['videoId']} Error thumbnail_url {thumbnail_url} : {e}")
                         self.writelog(f"[×] idVideo={video['videoId']} Error thumbnail_url {thumbnail_url} : {e}")
-                        self.exitProgram()
 
                 self.writeresult("\n")               
                 print("Title : " + str(title))
