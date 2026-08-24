@@ -184,8 +184,8 @@ class Program():
                 elif response.status_code == 404:
                     # Video not found
                     comments_json = json.loads(commentsResponse)                           
-                    print(f"[×] idVideo={infosVideo["videoId"]} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
-                    self.writelog(f"[×] idVideo={infosVideo["videoId"]} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
+                    print(f"[×] idVideo={infosVideo['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
+                    self.writelog(f"[×] idVideo={infosVideo['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
                     break                    
                 elif response.status_code == 403:
                     # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#commentthreads
