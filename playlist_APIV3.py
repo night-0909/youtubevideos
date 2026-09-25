@@ -1,11 +1,11 @@
 # -*- encoding: utf-8 -*-
 
-import scrapetube
 from datetime import datetime
 import dateutil.parser
 from bs4 import BeautifulSoup
 import sys
 import requests, json
+from urllib3.util.retry import Retry
 from zoneinfo import ZoneInfo
 
 class Program():
@@ -21,6 +21,7 @@ class Program():
         self.dateFormats = dateFormats
         self.loggingfile = None
         self.resultfile = None
+        self.sessionGoogleApis = None                
         
         self.start()
         
@@ -28,7 +29,7 @@ class Program():
         self.initLoggingFile()
         print("Starting program")
         self.writelog("Starting program")
-        
+        self.initSessionGoogleApis()
         self.initChannel()
         self.initResultFile()
         
@@ -71,12 +72,41 @@ class Program():
         # Write in real time
         #self.resultfile.flush()
 
+    def initSessionGoogleApis(self):
+        # Youtube Data API V3 can sometimes return HTTP status 400 and 403 whereas request is valid, and sending this same request succeeds.        
+        self.sessionGoogleApis = self.create_session(status_forcelist=(400, 403, 408, 425, 429, 500, 502, 503, 504))
+
+    def create_session(
+        self,
+        retries=3,
+        backoff_factor=1,
+        backoff_jitter=0.5,
+        allowed_methods=frozenset(["GET", "POST", "HEAD", "OPTIONS"]),
+        status_forcelist=(408, 425, 429, 500, 502, 503, 504),
+    ):
+        """Return a requests Session with sensible retry and backoff defaults."""
+        session = requests.Session()
+
+        retry = Retry(
+            total=retries,
+            backoff_factor=backoff_factor,
+            backoff_jitter=backoff_jitter,
+            allowed_methods=allowed_methods,
+            status_forcelist=status_forcelist,
+            raise_on_status=False
+        )
+
+        adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        return session
+
     def initChannel(self):
         # Get handle from idchannel
         channelInfosURL = "https://www.googleapis.com/youtube/v3/channels?key=" + self.youtubeKey + "&id=" + self.idchannel + "&part=snippet"
         print(channelInfosURL)
         try:
-            response = requests.get(channelInfosURL)
+            response = self.sessionGoogleApis.get(channelInfosURL, timeout=(3.05, 20))
             channelInfosResponse = response.text
             if response.status_code == 200:
                 channel_json = json.loads(channelInfosResponse)       
@@ -177,7 +207,7 @@ class Program():
                           "&part=id,replies,snippet&maxResults=100" + nextPageTokenCommentsString
             print(commentsURL)
             try:
-                response = requests.get(commentsURL)
+                response = self.sessionGoogleApis.get(commentsURL, timeout=(3.05, 20))
                 commentsResponse = response.text
                 if response.status_code == 200:
                     comments_json = json.loads(commentsResponse)
@@ -262,7 +292,7 @@ class Program():
                         print(repliesURL)
 
                         try:
-                            response = requests.get(repliesURL)
+                            response = self.sessionGoogleApis.get(repliesURL, timeout=(3.05, 20))
                             repliesResponse = response.text
                             if response.status_code == 200:
                                 replies_json = json.loads(repliesResponse)
@@ -356,7 +386,7 @@ class Program():
         print(playlistURL)
 
         try:
-            response = requests.get(playlistURL)
+            response = self.sessionGoogleApis.get(playlistURL, timeout=(3.05, 20))
             playlistResponse = response.text
             if response.status_code == 200:
                 playlist_json = json.loads(playlistResponse)
@@ -406,7 +436,7 @@ class Program():
             "&part=contentDetails,id,snippet,status" + pageTokenParams + "&maxResults=50"
             print(playlistItemsURL)
             try:
-                response = requests.get(playlistItemsURL)
+                response = self.sessionGoogleApis.get(playlistItemsURL, timeout=(3.05, 20))
                 playlistItemsResponse = response.text
                 if response.status_code == 200:
                     playlistItems_json = json.loads(playlistItemsResponse)
@@ -454,7 +484,7 @@ class Program():
                 print(additionnalInfosURL)
                 
                 try:
-                    response = requests.get(additionnalInfosURL)               
+                    response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))               
                     additionnalInfosResponse = response.text
                     if response.status_code == 200:
                         video_json = json.loads(additionnalInfosResponse)
