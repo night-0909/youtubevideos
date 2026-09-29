@@ -287,7 +287,7 @@ class Program():
                         if nextPageTokenReplies != 0 :
                             nextPageTokenRepliesString = "&pageToken=" + nextPageTokenReplies
                             
-                        repliesURL = "https://www.googleapis.com/youtube/v3/comments?key=" + youtubeKey + "&parentId=" + idComment + \
+                        repliesURL = "https://www.googleapis.com/youtube/v3/comments?key=" + self.youtubeKey + "&parentId=" + idComment + \
                         "&part=id,snippet&maxResults=100" + nextPageTokenRepliesString
                         print(repliesURL)
 
@@ -432,7 +432,7 @@ class Program():
             if nextPageToken != 0 :
                 pageTokenParams = "&pageToken=" + nextPageToken
 
-            playlistItemsURL = "https://www.googleapis.com/youtube/v3/playlistItems?key=" + youtubeKey + "&playlistId=" + playlistId + \
+            playlistItemsURL = "https://www.googleapis.com/youtube/v3/playlistItems?key=" + self.youtubeKey + "&playlistId=" + playlistId + \
             "&part=contentDetails,id,snippet,status" + pageTokenParams + "&maxResults=50"
             print(playlistItemsURL)
             try:
@@ -480,7 +480,7 @@ class Program():
                 self.writeresult("Add to playlist date : " + dateAddedToPlaylist_text + "\n")
                 
                 # Get additionnal infos of video
-                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + youtubeKey + "&id=" + videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 
                 try:
