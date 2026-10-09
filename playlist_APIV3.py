@@ -101,6 +101,12 @@ class Program():
         session.mount("http://", adapter)
         return session
 
+    def split_list(self, lst, chunk_size):
+        chunks = []
+        for i in range(0, len(lst), chunk_size):
+            chunks.append(lst[i:i + chunk_size])
+        return chunks
+
     def initChannel(self):
         # Get handle from idchannel
         channelInfosURL = "https://www.googleapis.com/youtube/v3/channels?key=" + self.youtubeKey + "&id=" + self.idchannel + "&part=snippet"
@@ -277,49 +283,18 @@ class Program():
                 # get replies of comment
                 # use https://www.googleapis.com/youtube/v3/comments to get all comments
                 if snippet.get('totalReplyCount') > 0:
-                    print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
-                    fcomment.write("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
-
                     hasMoreReplies = True
                     nextPageTokenReplies = 0
                     nextPageTokenRepliesString = ""
-                    while hasMoreReplies is True:
-                        if nextPageTokenReplies != 0 :
-                            nextPageTokenRepliesString = "&pageToken=" + nextPageTokenReplies
-                            
-                        repliesURL = "https://www.googleapis.com/youtube/v3/comments?key=" + self.youtubeKey + "&parentId=" + idComment + \
-                        "&part=id,snippet&maxResults=100" + nextPageTokenRepliesString
-                        print(repliesURL)
+                    
+                    print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
+                    fcomment.write("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
 
-                        try:
-                            response = self.sessionGoogleApis.get(repliesURL, timeout=(3.05, 20))
-                            repliesResponse = response.text
-                            if response.status_code == 200:
-                                replies_json = json.loads(repliesResponse)
-                            elif response.status_code == 404:
-                                # Comment parentId not found
-                                replies_json = json.loads(repliesResponse)
-                                print(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
-                                self.writelog(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
-                                break
-                            elif response.status_code == 403:
-                                # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#comments_youtube.comments.list
-                                replies_json = json.loads(repliesResponse)
-                                self.writeresult("\n")
-                                self.writeresult(f"{replies_json['error']['message']}")
-                                break
-                            else:
-                                print(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
-                                self.writelog(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
-                                self.exitProgram()
-                        except Exception as e:
-                            print(f"[×] idVideo={infosVideo['videoId']} Error repliesURL {repliesURL} : {e}")
-                            self.writelog(f"[×] idVideo={infosVideo['videoId']} Error repliesURL {repliesURL} : {e}")
-                            self.exitProgram()
-
-                        items = replies_json.get('items')
-                        for item in items:
-                            realsnippet = item.get('snippet')
+                    # Check if comment has all replies in replies object, if not get them with /comments endpoint
+                    if len(item.get('replies').get('comments')) == snippet.get('totalReplyCount'):
+                        replies = item.get('replies').get('comments')
+                        for reply in replies :
+                            realsnippet = reply.get('snippet')
                             author = realsnippet.get('authorDisplayName')
                             channelId = realsnippet.get('authorChannelId').get('value')
                             text = realsnippet.get('textDisplay')
@@ -327,12 +302,14 @@ class Program():
                             dateUpdate = realsnippet.get('updatedAt')
 
                             # Transform 2025-02-04T18:03:53Z to self.dateFormats["dateString"]
+                            #datePublish_object = datetime.fromisoformat(datePublish)
                             datePublish_object = dateutil.parser.isoparse(datePublish)
                             datePublish_text = datePublish_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
                             publish_dateString = datePublish_text
 
                             update_dateString = ""
                             if dateUpdate != datePublish:
+                                #dateUpdate_object = datetime.fromisoformat(dateUpdate)
                                 dateUpdate_object = dateutil.parser.isoparse(dateUpdate)
                                 dateUpdate_text = dateUpdate_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
                                 update_dateString = " (last edited on " + dateUpdate_text + ")"
@@ -349,16 +326,88 @@ class Program():
 
                             print(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
                             fcomment.write(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
-                            lastParentReplies = idComment
                             fcomment.write("\n")
-
-                        # Get continue token
-                        if "nextPageToken" in replies_json:
-                            nextPageTokenReplies = replies_json["nextPageToken"]
-                        else:
-                            hasMoreReplies = False
+                            lastParentReplies = idComment
                             
-                    fcomment.write("\n")                           
+                        fcomment.write("\n")
+                        hasMoreReplies = False
+                    else:
+                        while hasMoreReplies is True:
+                            if nextPageTokenReplies != 0 :
+                                nextPageTokenRepliesString = "&pageToken=" + nextPageTokenReplies
+                                
+                            repliesURL = "https://www.googleapis.com/youtube/v3/comments?key=" + self.youtubeKey + "&parentId=" + idComment + \
+                            "&part=id,snippet&maxResults=100" + nextPageTokenRepliesString
+                            print(repliesURL)
+
+                            try:
+                                response = self.sessionGoogleApis.get(repliesURL, timeout=(3.05, 20))
+                                repliesResponse = response.text
+                                if response.status_code == 200:
+                                    replies_json = json.loads(repliesResponse)
+                                elif response.status_code == 404:
+                                    # Comment parentId not found
+                                    replies_json = json.loads(repliesResponse)
+                                    print(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                    self.writelog(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                    break
+                                elif response.status_code == 403:
+                                    # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#comments_youtube.comments.list
+                                    replies_json = json.loads(repliesResponse)
+                                    self.writeresult("\n")
+                                    self.writeresult(f"{replies_json['error']['message']}")
+                                    break
+                                else:
+                                    print(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                    self.writelog(f"[×] idVideo={infosVideo['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                    self.exitProgram()
+                            except Exception as e:
+                                print(f"[×] idVideo={infosVideo['videoId']} Error repliesURL {repliesURL} : {e}")
+                                self.writelog(f"[×] idVideo={infosVideo['videoId']} Error repliesURL {repliesURL} : {e}")
+                                self.exitProgram()
+
+                            items = replies_json.get('items')
+                            for item in items:
+                                realsnippet = item.get('snippet')
+                                author = realsnippet.get('authorDisplayName')
+                                channelId = realsnippet.get('authorChannelId').get('value')
+                                text = realsnippet.get('textDisplay')
+                                datePublish = realsnippet.get('publishedAt')
+                                dateUpdate = realsnippet.get('updatedAt')
+
+                                # Transform 2025-02-04T18:03:53Z to self.dateFormats["dateString"]
+                                datePublish_object = dateutil.parser.isoparse(datePublish)
+                                datePublish_text = datePublish_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                                publish_dateString = datePublish_text
+
+                                update_dateString = ""
+                                if dateUpdate != datePublish:
+                                    dateUpdate_object = dateutil.parser.isoparse(dateUpdate)
+                                    dateUpdate_text = dateUpdate_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                                    update_dateString = " (last edited on " + dateUpdate_text + ")"
+                                
+                                # Clean HTML :
+                                # first replace <br> by new lines
+                                # then delete all HTML tags
+                                # https://www.geeksforgeeks.org/python/how-to-remove-html-tags-from-string-in-python/
+                                text = text.replace("\r\n", "<br>")
+                                text = text.replace("\r", "<br>")
+                                text = text.replace("<br>", "\n")
+                                soup = BeautifulSoup(text, "html.parser")
+                                textComment = soup.get_text()
+
+                                print(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
+                                fcomment.write(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
+                                lastParentReplies = idComment
+                                fcomment.write("\n")
+
+                            # Get continue token
+                            if "nextPageToken" in replies_json:
+                                nextPageTokenReplies = replies_json["nextPageToken"]
+                            else:
+                                hasMoreReplies = False
+                            
+                        fcomment.write("\n")                           
 
             # Get continue token
             if "nextPageToken" in comments_json:
@@ -462,8 +511,46 @@ class Program():
                 self.exitProgram()
                 
             nextPageToken = playlistItems_json.get('nextPageToken')
-            
             itemsPlaylist = playlistItems_json.get('items')
+
+            # Get additional infos of video, 50 at once to optimize quota
+            videosWithInfosList = {}
+            if len(itemsPlaylist) > 0:
+                videoIdListChunk = []
+                
+                for itemPlaylist in itemsPlaylist:
+                    contentDetailsPlaylistItem = itemPlaylist.get('contentDetails')
+                    videoId = contentDetailsPlaylistItem.get('videoId')   
+                    videoIdListChunk.append(videoId)
+
+                videoIdListChunk = ','.join(videoIdListChunk)
+        
+                # Get additional infos of videos
+                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunk + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+                print(additionnalInfosURL)
+                try:
+                    response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
+                    additionnalInfosResponse = response.text
+                    if response.status_code == 200:
+                        video_json = json.loads(additionnalInfosResponse)
+                        if video_json.get('pageInfo').get('totalResults') == 0:                        
+                            print(f"[×] {additionnalInfosURL} : no result")
+                            self.writelog(f"[×] {additionnalInfosURL} : no result")
+                    else:
+                        print(f"[×] Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        self.writelog(f"[×] Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        self.exitProgram()
+                except Exception as e:
+                    print(f"[×] Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    self.writelog(f"[×] Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    self.exitProgram()
+
+                # Store video informations from Youtube Data API
+                videos_additionnalInfos = video_json.get('items')
+                for video_add in videos_additionnalInfos:
+                    videosWithInfosList[video_add.get('id')] = video_add
+
+            # Browse items of playlist
             for itemPlaylist in itemsPlaylist:
                 snippetPlaylistItem = itemPlaylist.get('snippet')
                 title = snippetPlaylistItem.get('title')
@@ -478,117 +565,100 @@ class Program():
                 dateAddedToPlaylist_object = dateutil.parser.isoparse(dateAddedToPlaylist)
                 dateAddedToPlaylist_text = dateAddedToPlaylist_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
                 self.writeresult("Add to playlist date : " + dateAddedToPlaylist_text + "\n")
-                
-                # Get additionnal infos of video
-                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
-                print(additionnalInfosURL)
-                
-                try:
-                    response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))               
-                    additionnalInfosResponse = response.text
-                    if response.status_code == 200:
-                        video_json = json.loads(additionnalInfosResponse)
-                        if video_json.get('pageInfo').get('totalResults') == 0:                        
-                            print(f"[×] idVideo={'videoId'} video not found")
-                            self.writelog(f"[×] idVideo={videoId} video not found")
-                            continue
-                    else:
-                        print(f"[×] idVideo={videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
-                        self.writelog(f"[×] idVideo={videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
-                        self.exitProgram()
-                except Exception as e:
-                    print(f"[×] idVideo={videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
-                    self.writelog(f"[×] idVideo={videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
-                    self.exitProgram()
-                    
-                if (len(video_json.get('items')) > 0):
-                    itemVideo = video_json.get('items')[0]
-                    snippetVideo = itemVideo.get('snippet')
 
-                    dateVideo = snippetVideo.get('publishedAt')
-                    dateVideo_object = dateutil.parser.isoparse(dateVideo)
-                    dateVideo_text = dateVideo_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                    
-                    title = snippetVideo.get('title')
-                    description = snippetVideo.get('description')
-
-                    contentDetailsVideo = itemVideo.get('contentDetails')
-                    duration = contentDetailsVideo.get('duration', '')
-                    durationString = duration[2:len(duration)]
-                    
-                    statsVideo = itemVideo.get('statistics')
-                    viewCount = statsVideo.get('viewCount')
-                    likeCount = statsVideo.get('likeCount')
-                    commentCount = statsVideo.get('commentCount')
-
-                    print("Date : " + dateVideo_text)
-                    self.writeresult("Date : " + dateVideo_text)
-                        
-                    # Get liveStreamingDetails infos
-                    if "liveStreamingDetails" in itemVideo:
-                        if snippetVideo.get("liveBroadcastContent") == "none":                    
-                            actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
-                            actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                            actualEndTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualEndTime", ""))
-                            actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-
-                            print("start : " + actualStartTime_text)
-                            self.writeresult(" (start : " + actualStartTime_text)
-                            print("end : " + actualEndTime_text)
-                            self.writeresult(" end : " + actualEndTime_text + ")")
-                        elif snippetVideo.get("liveBroadcastContent") == "live":
-                            actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
-                            actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                            actualEndTime_text = "live"
-                            durationString = "None"
-
-                            print("start : " + actualStartTime_text)
-                            self.writeresult(" (start : " + actualStartTime_text)
-                            print("end : " + actualEndTime_text)
-                            self.writeresult(" end : " + actualEndTime_text + ")")
-                        elif snippetVideo.get("liveBroadcastContent") == "upcoming":
-                            actualscheduledStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("scheduledStartTime", ""))
-                            actualscheduledStartTime_text = actualscheduledStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                            durationString = "None"
-
-                            print("scheduled : " + actualscheduledStartTime_text)
-                            self.writeresult(" (scheduled : " + actualscheduledStartTime_text + ")")
-                    
+                if videoId not in videosWithInfosList:
+                    print(f"[×] idVideo={'videoId'} video not found")
+                    self.writelog(f"[×] idVideo={videoId} video not found")
                     self.writeresult("\n")
-
-                    print("Duration : " + str(durationString))
-                    self.writeresult("Duration : " + str(durationString))
-                    self.writeresult("\n")
-
-                    if self.needDescription is True:
-                        print("Description : " + str(description))
-                        self.writeresult("Description : " + str(description))
-                        self.writeresult("\n")
-                    
-                    print("Views : " + str(viewCount))
-                    self.writeresult("Views : " + str(viewCount))
-                    self.writeresult("\n")
-                    print("Likes : " + str(likeCount))
-                    self.writeresult("Likes : " + str(likeCount))
-                    self.writeresult("\n")
-                    print("Comments : " + str(commentCount))
-                    self.writeresult("Comments : " + str(commentCount))
-                    self.writeresult("\n")
+                    continue
                                     
-                    # Get comments
-                    if self.needComments is True:
-                        # Just pass useful informations to getComments()
-                        print("Get comments video " + str(videoId))
-                        infosVideo = {"videoId": videoId, "title": title, "durationString": durationString, "date" : dateVideo_text,
-                                      "description": description,
-                                      "liveBroadcastContent": snippetVideo.get("liveBroadcastContent", None), 
-                                      "liveStreamingDetails": itemVideo.get("liveStreamingDetails", None)}
+                itemVideo = videosWithInfosList[videoId]
+                snippetVideo = itemVideo.get('snippet')
 
-                        self.getComments(infosVideo)                
+                dateVideo = snippetVideo.get('publishedAt')
+                dateVideo_object = dateutil.parser.isoparse(dateVideo)
+                dateVideo_text = dateVideo_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                
+                title = snippetVideo.get('title')
+                description = snippetVideo.get('description')
+
+                contentDetailsVideo = itemVideo.get('contentDetails')
+                duration = contentDetailsVideo.get('duration', '')
+                durationString = duration[2:len(duration)]
+                
+                statsVideo = itemVideo.get('statistics')
+                viewCount = statsVideo.get('viewCount')
+                likeCount = statsVideo.get('likeCount')
+                commentCount = statsVideo.get('commentCount')
+
+                print("Date : " + dateVideo_text)
+                self.writeresult("Date : " + dateVideo_text)
+                    
+                # Get liveStreamingDetails infos
+                if "liveStreamingDetails" in itemVideo:
+                    if snippetVideo.get("liveBroadcastContent") == "none":                    
+                        actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        actualEndTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualEndTime", ""))
+                        actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+
+                        print("start : " + actualStartTime_text)
+                        self.writeresult(" (start : " + actualStartTime_text)
+                        print("end : " + actualEndTime_text)
+                        self.writeresult(" end : " + actualEndTime_text + ")")
+                    elif snippetVideo.get("liveBroadcastContent") == "live":
+                        actualStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        actualEndTime_text = "live"
+                        durationString = "None"
+
+                        print("start : " + actualStartTime_text)
+                        self.writeresult(" (start : " + actualStartTime_text)
+                        print("end : " + actualEndTime_text)
+                        self.writeresult(" end : " + actualEndTime_text + ")")
+                    elif snippetVideo.get("liveBroadcastContent") == "upcoming":
+                        actualscheduledStartTime_object = dateutil.parser.isoparse(itemVideo.get("liveStreamingDetails").get("scheduledStartTime", ""))
+                        actualscheduledStartTime_text = actualscheduledStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        durationString = "None"
+
+                        print("scheduled : " + actualscheduledStartTime_text)
+                        self.writeresult(" (scheduled : " + actualscheduledStartTime_text + ")")
+                
+                self.writeresult("\n")
+
+                print("Duration : " + str(durationString))
+                self.writeresult("Duration : " + str(durationString))
+                self.writeresult("\n")
+
+                if self.needDescription is True:
+                    print("Description : " + str(description))
+                    self.writeresult("Description : " + str(description))
+                    self.writeresult("\n")
+                
+                print("Views : " + str(viewCount))
+                self.writeresult("Views : " + str(viewCount))
+                self.writeresult("\n")
+                print("Likes : " + str(likeCount))
+                self.writeresult("Likes : " + str(likeCount))
+                self.writeresult("\n")
+                print("Comments : " + str(commentCount))
+                self.writeresult("Comments : " + str(commentCount))
+                self.writeresult("\n")
+                                
+                # Get comments
+                if self.needComments is True:
+                    # Just pass useful informations to getComments()
+                    print("Get comments video " + str(videoId))
+                    infosVideo = {"videoId": videoId, "title": title, "durationString": durationString, "date" : dateVideo_text,
+                                  "description": description,
+                                  "liveBroadcastContent": snippetVideo.get("liveBroadcastContent", None), 
+                                  "liveStreamingDetails": itemVideo.get("liveStreamingDetails", None)}
+
+                    self.getComments(infosVideo)                
 
                 self.writeresult("\n")                
                 num_videos_processed = num_videos_processed + 1
-        
+    
         print(f"Processed : {num_videos_processed}")
         self.writelog(f"Processed : {num_videos_processed}")
                     

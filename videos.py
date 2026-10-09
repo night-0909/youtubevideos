@@ -106,6 +106,12 @@ class Program():
         session.mount("http://", adapter)
         return session
 
+    def split_list(self, lst, chunk_size):
+        chunks = []
+        for i in range(0, len(lst), chunk_size):
+            chunks.append(lst[i:i + chunk_size])
+        return chunks
+
     def initChannel(self):
         channelInfosURL = "https://www.googleapis.com/youtube/v3/channels?key=" + self.youtubeKey + "&id=" + self.idchannel + "&part=snippet"
         print(channelInfosURL)
@@ -175,47 +181,77 @@ class Program():
             print(f"Type : {videotype} (total : {num_videosList})")
             self.writelog(f"Type : {videotype} (total : {num_videosList})")
             self.writeresult(f"Type : {videotype} (total : {num_videosList})")
-            self.writeresult("\n\n")            
-            
-            for video in videosList:
-                url = "https://www.youtube.com/watch?v="+str(video['videoId'])
-                print(url)               
-                self.writeresult(url)
-                self.writeresult("\n")
+            self.writeresult("\n\n")
+
+            # Get additional infos of video, 50 at once to optimize quota
+
+            # Create a new dict videosWithInfosList that will store videoId as key, and scrapetube and youtube data api values as value
+            videosWithInfosList = {}
+            for v in videosList:
+                videosWithInfosList[v['videoId']] = v
                 
-                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + video['videoId'] + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+            chunk_size = 50
+            videosWithInfosList_chunk = self.split_list(videosList, chunk_size)
+
+            for videos_chunk in videosWithInfosList_chunk:
+                videoIdListChunkId = []                
+                for video in videos_chunk:
+                    videoIdListChunkId.append(video['videoId'])
+
+                videoIdListChunk = ','.join(videoIdListChunkId)
+
+                # Get additional infos of videos
+                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunk + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
                     response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
                     additionnalInfosResponse = response.text
                     if response.status_code == 200:
                         video_json = json.loads(additionnalInfosResponse)
-                        if video_json.get('pageInfo').get('totalResults') == 0:
-                            print(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : video not found")
-                            self.writelog(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : video not found")
+                        if video_json.get('pageInfo').get('totalResults') == 0:                        
+                            print(f"[×] {additionnalInfosURL} : no result")
+                            self.writelog(f"[×] {additionnalInfosURL} : no result")
                             continue
                     else:
-                        print(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
-                        self.writelog(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        print(f"[×] Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        self.writelog(f"[×] Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
                         self.exitProgram()
                 except Exception as e:
-                    print(f"[×] idVideo={video['videoId']} Error additionnalInfosURL {additionnalInfosURL} : {e}")
-                    self.writelog(f"[×] idVideo={video['videoId']} Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    print(f"[×] Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    self.writelog(f"[×] Error additionnalInfosURL {additionnalInfosURL} : {e}")
                     self.exitProgram()
+
+                # Store video informations from Youtube Data API
+                videos_additionnalInfos = video_json.get('items')
+                for video_add in videos_additionnalInfos:
+                    videosWithInfosList[video_add.get('id')]['youtube_api'] = video_add
+
+            # Browse every video
+            for video_key, video_info in videosWithInfosList.items():
+                idVideo = video_info['videoId']
+                url = f"https://www.youtube.com/watch?v={idVideo}"            
+                print(url)               
                 
-                item = video_json.get('items')[0]
-                snippet = item.get('snippet')
+                if "youtube_api" not in video_info:
+                    print(f"[×] idVideo={idVideo} video not found")
+                    self.writelog(f"[×] idVideo={idVideo} video not found")
+                    continue
+                
+                self.writeresult(url)
+                self.writeresult("\n")
+                
+                snippet = video_info["youtube_api"].get('snippet')
                 dateVideo = snippet.get('publishedAt')
                 dateVideo_object = dateutil.parser.isoparse(dateVideo)
                 dateVideo_text = dateVideo_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
                 title = snippet.get('title')
                 description = snippet.get('description')
 
-                contentDetails = item.get('contentDetails')
+                contentDetails = video_info["youtube_api"].get('contentDetails')
                 duration = contentDetails.get('duration', '')
                 durationString = duration[2:len(duration)]
                 
-                stats = item.get('statistics')
+                stats = video_info["youtube_api"].get('statistics')
                 viewCount = stats.get('viewCount')
                 likeCount = stats.get('likeCount')
                 commentCount = stats.get('commentCount')
@@ -224,11 +260,11 @@ class Program():
                 self.writeresult("Date : " + dateVideo_text)
                  
                 # Get liveStreamingDetails infos
-                if "liveStreamingDetails" in item:
+                if "liveStreamingDetails" in video_info["youtube_api"]:
                     if snippet.get("liveBroadcastContent") == "none":                    
-                        actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_object = dateutil.parser.isoparse(video_info["youtube_api"].get("liveStreamingDetails").get("actualStartTime", ""))
                         actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                        actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
+                        actualEndTime_object = dateutil.parser.isoparse(video_info["youtube_api"].get("liveStreamingDetails").get("actualEndTime", ""))
                         actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
 
                         print("start : " + actualStartTime_text)
@@ -236,7 +272,7 @@ class Program():
                         print("end : " + actualEndTime_text)
                         self.writeresult(" end : " + actualEndTime_text + ")")
                     elif snippet.get("liveBroadcastContent") == "live":
-                        actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_object = dateutil.parser.isoparse(video_info["youtube_api"].get("liveStreamingDetails").get("actualStartTime", ""))
                         actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
                         actualEndTime_text = "live"
                         durationString = "None"
@@ -246,7 +282,7 @@ class Program():
                         print("end : " + actualEndTime_text)
                         self.writeresult(" end : " + actualEndTime_text + ")")
                     elif snippet.get("liveBroadcastContent") == "upcoming":
-                        actualscheduledStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("scheduledStartTime", ""))
+                        actualscheduledStartTime_object = dateutil.parser.isoparse(video_info["youtube_api"].get("liveStreamingDetails").get("scheduledStartTime", ""))
                         actualscheduledStartTime_text = actualscheduledStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
                         durationString = "None"
 
@@ -271,7 +307,7 @@ class Program():
                             thumbnailInfosResponse = response.content
 
                             # Download file without extension
-                            filethumbnail = video['videoId'] + "_thumbnail_" + dateNow['dateFileString']
+                            filethumbnail = video_info['videoId'] + "_thumbnail_" + dateNow['dateFileString']
                             fthumbnail = open(filethumbnail, "wb")
                             fthumbnail.write(thumbnailInfosResponse)
                             fthumbnail.close()
@@ -283,14 +319,14 @@ class Program():
                                 newfilethumbnail = filethumbnail + fileExtension
                                 os.rename(filethumbnail, newfilethumbnail)
                             else:
-                                print(f"[×] idVideo={video['videoId']} filethumbnail={filethumbnail} Couldn't guess file extension mimetype={fileMimetype}, we keep file without extension")
-                                self.writelog(f"[×] idVideo={video['videoId']} filethumbnail={filethumbnail} Couldn't guess file extension mimetype={fileMimetype}, we keep file without extension")
+                                print(f"[×] idVideo={video_info['videoId']} filethumbnail={filethumbnail} Couldn't guess file extension mimetype={fileMimetype}, we keep file without extension")
+                                self.writelog(f"[×] idVideo={video_info['videoId']} filethumbnail={filethumbnail} Couldn't guess file extension mimetype={fileMimetype}, we keep file without extension")
                         else:
-                            print(f"[×] idVideo={video['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
-                            self.writelog(f"[×] idVideo={video['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
+                            print(f"[×] idVideo={video_info['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
+                            self.writelog(f"[×] idVideo={video_info['videoId']} Response of thumbnail_url {thumbnail_url} isn't OK : {response.status_code} {response.text}")
                     except Exception as e:
-                        print(f"[×] idVideo={video['videoId']} Error thumbnail_url {thumbnail_url} : {e}")
-                        self.writelog(f"[×] idVideo={video['videoId']} Error thumbnail_url {thumbnail_url} : {e}")
+                        print(f"[×] idVideo={video_info['videoId']} Error thumbnail_url {thumbnail_url} : {e}")
+                        self.writelog(f"[×] idVideo={video_info['videoId']} Error thumbnail_url {thumbnail_url} : {e}")
 
                 self.writeresult("\n")               
                 print("Title : " + str(title))
