@@ -523,10 +523,10 @@ class Program():
                     videoId = contentDetailsPlaylistItem.get('videoId')   
                     videoIdListChunk.append(videoId)
 
-                videoIdListChunk = ','.join(videoIdListChunk)
+                videoIdListChunkStr = ','.join(videoIdListChunk)
         
                 # Get additional infos of videos
-                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunk + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunkStr + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
                     response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
