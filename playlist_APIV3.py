@@ -459,14 +459,24 @@ class Program():
         title = snippet.get('title')
         description = snippet.get('description')
         itemCount = items[0].get('contentDetails').get('itemCount')
+
+        datePublish = snippet.get('publishedAt')
+        # Transform 2025-02-04T18:03:53Z to self.dateFormats["dateString"]
+        datePublish_object = dateutil.parser.isoparse(datePublish)
+        datePublish_text = datePublish_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+        publish_dateString = datePublish_text
+        
         print(title)
         print(description)
         print(itemCount)
+        print(publish_dateString)
         
         self.writeresult(f"Title : {title}")
         self.writeresult("\n")
         self.writeresult(f"Description : {description}")
         self.writeresult("\n")
+        self.writeresult(f"Date : {publish_dateString}")
+        self.writeresult("\n")        
         self.writeresult(f"Videos : {itemCount}")
         self.writelog(f"Playlist id : {self.playlistId}")
         self.writelog(f"Videos : {itemCount}")
